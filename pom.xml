@@ -29,7 +29,7 @@
     </organization>
     <licenses>
         <license>
-            <name>GNU Lesser General Public v3</name>
+            <name>GNU Lesser General Public v4</name>
             <url>http://www.gnu.org/licenses/lgpl.html</url>
             <distribution>repo</distribution>
         </license>
