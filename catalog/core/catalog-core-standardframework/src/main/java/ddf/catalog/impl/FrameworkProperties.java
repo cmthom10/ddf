@@ -21,7 +21,6 @@ import java.util.concurrent.ExecutorService;
 
 import org.osgi.framework.BundleContext;
 
-import ddf.catalog.cache.impl.ResourceCache;
 import ddf.catalog.cache.solr.impl.ValidationQueryFactory;
 import ddf.catalog.content.StorageProvider;
 import ddf.catalog.content.plugin.PostCreateStoragePlugin;
@@ -92,7 +91,7 @@ public class FrameworkProperties {
 
     private SourcePoller sourcePoller;
 
-    private ResourceCache resourceCache;
+//    private ResourceCache resourceCache;
 
     private DownloadsStatusEventPublisher downloadsStatusEventPublisher;
 
@@ -255,13 +254,15 @@ public class FrameworkProperties {
         this.sourcePoller = sourcePoller;
     }
 
-    public ResourceCache getResourceCache() {
-        return resourceCache;
-    }
+//    @Deprecated
+//    public ResourceCache getResourceCache() {
+//        return resourceCache;
+//    }
 
-    public void setResourceCache(ResourceCache resourceCache) {
-        this.resourceCache = resourceCache;
-    }
+//    @Deprecated
+//    public void setResourceCache(ResourceCache resourceCache) {
+//        this.resourceCache = resourceCache;
+//    }
 
     public DownloadsStatusEventPublisher getDownloadsStatusEventPublisher() {
         return downloadsStatusEventPublisher;
