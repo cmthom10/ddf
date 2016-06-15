@@ -267,44 +267,6 @@ public class CatalogFrameworkImpl extends DescribableImpl implements CatalogFram
                 .setActivityEnabled(activityEnabled);
     }
 
-    /**
-     * Set the delay, in seconds, between product retrieval retry attempts.
-     *
-     * @param delayBetweenAttempts Delay in seconds
-     */
-    public void setDelayBetweenRetryAttempts(int delayBetweenAttempts) {
-        LOGGER.debug("Setting delayBetweenRetryAttempts = {} s", delayBetweenAttempts);
-        frameworkProperties.getReliableResourceDownloadManager()
-                .setDelayBetweenAttempts(delayBetweenAttempts);
-    }
-
-    /**
-     * Maximum number of attempts to try and retrieve product
-     */
-    public void setMaxRetryAttempts(int maxRetryAttempts) {
-        LOGGER.debug("Setting maxRetryAttempts = {}", maxRetryAttempts);
-        frameworkProperties.getReliableResourceDownloadManager()
-                .setMaxRetryAttempts(maxRetryAttempts);
-    }
-
-    /**
-     * Set the frequency, in seconds, to monitor the product retrieval.
-     * If this amount of time passes with no bytes being retrieved for
-     * the product, then the monitor will start a new download attempt.
-     *
-     * @param retrievalMonitorPeriod Frequency in seconds
-     */
-    public void setRetrievalMonitorPeriod(int retrievalMonitorPeriod) {
-        LOGGER.debug("Setting retrievalMonitorPeriod = {} s", retrievalMonitorPeriod);
-        frameworkProperties.getReliableResourceDownloadManager()
-                .setMonitorPeriod(retrievalMonitorPeriod);
-    }
-
-    public void setCacheWhenCanceled(boolean cacheWhenCanceled) {
-        LOGGER.debug("Setting cacheWhenCanceled = {}", cacheWhenCanceled);
-        frameworkProperties.getReliableResourceDownloadManager()
-                .setCacheWhenCanceled(cacheWhenCanceled);
-    }
 
     /**
      * Invoked by blueprint when a {@link CatalogProvider} is created and bound to this
@@ -2468,7 +2430,7 @@ public class CatalogFrameworkImpl extends DescribableImpl implements CatalogFram
                     LOGGER.debug("Adding federated site to federated query: {}",
                             source.getId());
                 }
-                // TODO: Should this be all done in ReliableResourceDownloadManager?
+
                 if (source != null) {
                     LOGGER.debug("Retrieving product from remote source {}", source.getId());
                     ResourceRetriever retriever = new RemoteResourceRetriever(source,

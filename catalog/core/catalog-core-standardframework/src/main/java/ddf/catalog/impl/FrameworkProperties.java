@@ -91,7 +91,6 @@ public class FrameworkProperties {
 
     private SourcePoller sourcePoller;
 
-//    private ResourceCache resourceCache;
 
     private DownloadsStatusEventPublisher downloadsStatusEventPublisher;
 
@@ -253,16 +252,6 @@ public class FrameworkProperties {
     public void setSourcePoller(SourcePoller sourcePoller) {
         this.sourcePoller = sourcePoller;
     }
-
-//    @Deprecated
-//    public ResourceCache getResourceCache() {
-//        return resourceCache;
-//    }
-
-//    @Deprecated
-//    public void setResourceCache(ResourceCache resourceCache) {
-//        this.resourceCache = resourceCache;
-//    }
 
     public DownloadsStatusEventPublisher getDownloadsStatusEventPublisher() {
         return downloadsStatusEventPublisher;
