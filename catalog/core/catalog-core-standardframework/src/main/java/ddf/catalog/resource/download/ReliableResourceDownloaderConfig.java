@@ -13,7 +13,10 @@
  */
 package ddf.catalog.resource.download;
 
+import com.google.common.util.concurrent.ListeningExecutorService;
+
 import ddf.catalog.cache.impl.ResourceCacheImpl;
+import ddf.catalog.event.retrievestatus.DownloadStatusInfo;
 import ddf.catalog.event.retrievestatus.DownloadsStatusEventListener;
 import ddf.catalog.event.retrievestatus.DownloadsStatusEventPublisher;
 
