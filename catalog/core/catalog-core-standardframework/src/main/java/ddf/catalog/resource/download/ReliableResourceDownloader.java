@@ -29,7 +29,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.activation.MimeType;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,10 +37,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.CountingOutputStream;
 import com.google.common.io.FileBackedOutputStream;
 
-import ddf.catalog.cache.impl.CacheKey;
-import ddf.catalog.cache.impl.ResourceCache;
 import ddf.catalog.data.Metacard;
-import ddf.catalog.event.retrievestatus.DownloadStatusInfo;
 import ddf.catalog.event.retrievestatus.DownloadsStatusEventListener;
 import ddf.catalog.event.retrievestatus.DownloadsStatusEventPublisher;
 import ddf.catalog.event.retrievestatus.DownloadsStatusEventPublisher.ProductRetrievalStatus;
@@ -50,7 +46,6 @@ import ddf.catalog.operation.impl.ResourceResponseImpl;
 import ddf.catalog.resource.Resource;
 import ddf.catalog.resource.ResourceNotFoundException;
 import ddf.catalog.resource.ResourceNotSupportedException;
-import ddf.catalog.resource.data.ReliableResource;
 import ddf.catalog.resource.download.DownloadManagerState.DownloadState;
 import ddf.catalog.resource.impl.ResourceImpl;
 import ddf.catalog.resourceretriever.ResourceRetriever;
@@ -70,6 +65,8 @@ public class ReliableResourceDownloader implements Runnable {
 
     private Future<ReliableResourceStatus> downloadFuture;
 
+    private ReliableResourceStatus reliableResourceStatus = null;
+
     private ExecutorService downloadExecutor = Executors.newSingleThreadExecutor();
 
     private AtomicBoolean downloadStarted;
@@ -84,8 +81,6 @@ public class ReliableResourceDownloader implements Runnable {
 
     private CountingOutputStream countingFbos;
 
-    private ReliableResource reliableResource;
-
     private DownloadManagerState downloadState;
 
     private Metacard metacard;
@@ -98,28 +93,32 @@ public class ReliableResourceDownloader implements Runnable {
 
     private DownloadsStatusEventListener eventListener;
 
-    private ResourceCache resourceCache;
-
     private DownloadsStatusEventPublisher eventPublisher;
 
-    private String filePath;
+    private String filePath = "";
 
     private ResourceRetriever retriever;
+
+    private Resource resource;
+
+    private long reliableResourceByteSize = 0;
+
+    private boolean continueDownloadingWhenCancelled = false;
 
     /**
      * Only set to true if cacheEnabled is true *AND* product being downloaded is not already
      * pending caching, e.g., another client has already started downloading and caching it.
      */
-    private boolean doCaching;
 
-    public ReliableResourceDownloader(ReliableResourceDownloaderConfig downloaderConfig,
-            AtomicBoolean downloadStarted, String downloadIdentifier,
-            ResourceResponse resourceResponse, ResourceRetriever retriever) {
-        this.downloadStarted = downloadStarted;
-        this.downloaderConfig = downloaderConfig;
-        this.downloadIdentifier = downloadIdentifier;
-        this.resourceResponse = resourceResponse;
-        this.retriever = retriever;
+
+        public ReliableResourceDownloader(ReliableResourceDownloaderConfig downloaderConfig,
+                AtomicBoolean downloadStarted, String downloadIdentifier,
+                ResourceResponse resourceResponse, ResourceRetriever retriever) {
+            this.downloadStarted = downloadStarted;
+            this.downloaderConfig = downloaderConfig;
+            this.downloadIdentifier = downloadIdentifier;
+            this.resourceResponse = resourceResponse;
+            this.retriever = retriever;
 
         this.downloadState = new DownloadManagerState();
         this.downloadState.setDownloadState(DownloadManagerState.DownloadState.NOT_STARTED);
@@ -130,13 +129,17 @@ public class ReliableResourceDownloader implements Runnable {
 
         this.eventListener = downloaderConfig.getEventListener();
         this.eventPublisher = downloaderConfig.getEventPublisher();
-        this.resourceCache = downloaderConfig.getResourceCache();
         this.downloadState.setContinueCaching(this.downloaderConfig.isCacheWhenCanceled());
     }
 
-    public ResourceResponse setupDownload(Metacard metacard,
-            DownloadStatusInfo downloadStatusInfo) {
-        Resource resource = resourceResponse.getResource();
+    /**
+     * Setup before the downloader is run.
+     * @param metacard the metacard associated with the file to be downloaded.
+     * @param fos A file output stream that may arrive null.
+     * @return the resourceResponse at the end of the setup.
+     */
+    public ResourceResponse setupDownload(Metacard metacard, FileOutputStream fos, boolean continueDownloadingWhenCancelled) {
+        resource = resourceResponse.getResource();
         MimeType mimeType = resource.getMimeType();
         String resourceName = resource.getName();
 
@@ -149,6 +152,8 @@ public class ReliableResourceDownloader implements Runnable {
                 resourceResponse);
 
         this.metacard = metacard;
+        this.fos = fos;
+        this.continueDownloadingWhenCancelled = continueDownloadingWhenCancelled;
 
         // Create new ResourceResponse to return that will encapsulate the
         // ReliableResourceInputStream that will be read by the client simultaneously as the product
@@ -162,55 +167,12 @@ public class ReliableResourceDownloader implements Runnable {
         resourceInputStream = resource.getInputStream();
 
         eventListener.setDownloadMap(downloadIdentifier, resourceResponse);
-        downloadStatusInfo.addDownloadInfo(downloadIdentifier, this, resourceResponse);
-
-        if (downloaderConfig.isCacheEnabled()) {
-
-            CacheKey keyMaker = null;
-            String key = null;
-            try {
-                keyMaker = new CacheKey(metacard, resourceResponse.getRequest());
-                key = keyMaker.generateKey();
-            } catch (IllegalArgumentException e) {
-                LOGGER.info("Cannot create cache key for resource with metacard ID = {}",
-                        metacard.getId());
-                return resourceResponse;
-            }
-
-            if (!resourceCache.isPending(key)) {
-
-                // Fully qualified path to cache file that will be written to.
-                // Example:
-                // <INSTALL-DIR>/data/product-cache/<source-id>-<metacard-id>
-                // <INSTALL-DIR>/data/product-cache/ddf.distribution-abc123
-                filePath = FilenameUtils.concat(resourceCache.getProductCacheDirectory(), key);
-                reliableResource = new ReliableResource(key,
-                        filePath,
-                        mimeType,
-                        resourceName,
-                        metacard);
-                resourceCache.addPendingCacheEntry(reliableResource);
-
-                try {
-                    fos = FileUtils.openOutputStream(new File(filePath));
-                    doCaching = true;
-                    this.downloadState.setCacheEnabled(true);
-                } catch (IOException e) {
-                    LOGGER.info("Unable to open cache file {} - no caching will be done.",
-                            filePath);
-                }
-            } else {
-                LOGGER.debug("Cache key {} is already pending caching", key);
-            }
-        }
-
         return resourceResponse;
     }
 
     @Override
     public void run() {
         long bytesRead = 0;
-        ReliableResourceStatus reliableResourceStatus = null;
         int retryAttempts = 0;
 
         try {
@@ -310,13 +272,6 @@ public class ReliableResourceDownloader implements Runnable {
                                 false,
                                 true);
                     }
-                    if (doCaching) {
-                        LOGGER.debug("Setting reliableResource size");
-                        reliableResource.setSize(reliableResourceStatus.getBytesRead());
-                        LOGGER.debug("Adding caching key = {} to cache map",
-                                reliableResource.getKey());
-                        resourceCache.put(reliableResource);
-                    }
                     break;
                 } else {
                     bytesRead = reliableResourceStatus.getBytesRead();
@@ -373,15 +328,11 @@ public class ReliableResourceDownloader implements Runnable {
                                         downloaderConfig.getMaxRetryAttempts()),
                                 reliableResourceStatus.getBytesRead(),
                                 downloadIdentifier);
-                        if (doCaching) {
-                            deleteCacheFile(fos);
-                            resourceCache.removePendingCacheEntry(reliableResource.getKey());
-                            // Disable caching since the cache file being written to had issues
+
                             downloaderConfig.setCacheEnabled(false);
-                            doCaching = false;
                             downloadState.setCacheEnabled(downloaderConfig.isCacheEnabled());
-                            downloadState.setContinueCaching(doCaching);
-                        }
+                            downloadState.setContinueCaching(false);
+
                         reliableResourceCallable = new ReliableResourceCallable(resourceInputStream,
                                 countingFbos,
                                 downloaderConfig.getChunkSize(),
@@ -426,7 +377,7 @@ public class ReliableResourceDownloader implements Runnable {
                                 "",
                                 reliableResourceStatus.getBytesRead(),
                                 downloadIdentifier);
-                        if (doCaching && downloaderConfig.isCacheWhenCanceled()) {
+                        if (continueDownloadingWhenCancelled) {
                             LOGGER.debug("Continuing to cache product");
                             reliableResourceCallable = new ReliableResourceCallable(
                                     resourceInputStream,
@@ -437,7 +388,6 @@ public class ReliableResourceDownloader implements Runnable {
                         } else {
                             break;
                         }
-
                     } else if (DownloadStatus.RESOURCE_DOWNLOAD_INTERRUPTED.equals(
                             reliableResourceStatus.getDownloadStatus())) {
 
@@ -470,9 +420,7 @@ public class ReliableResourceDownloader implements Runnable {
 
             if (null != reliableResourceStatus && !DownloadStatus.RESOURCE_DOWNLOAD_COMPLETE.equals(
                     reliableResourceStatus.getDownloadStatus())) {
-                if (doCaching) {
-                    deleteCacheFile(fos);
-                }
+
                 if (!DownloadStatus.RESOURCE_DOWNLOAD_CANCELED.equals(reliableResourceStatus.getDownloadStatus())) {
                     eventPublisher.postRetrievalStatus(resourceResponse,
                             ProductRetrievalStatus.FAILED,
@@ -492,6 +440,7 @@ public class ReliableResourceDownloader implements Runnable {
                     reliableResourceStatus.getBytesRead(),
                     downloadIdentifier);
         } finally {
+            reliableResourceByteSize = bytesRead;
             cleanupAfterDownload(reliableResourceStatus);
             downloadExecutor.shutdown();
         }
@@ -557,27 +506,12 @@ public class ReliableResourceDownloader implements Runnable {
         return reliableResourceCallable;
     }
 
-    private void deleteCacheFile(FileOutputStream fos) {
-        LOGGER.debug("Deleting partially cached file {}", filePath);
-        IOUtils.closeQuietly(fos);
-
-        // Delete the cache file since it will no longer be written to and it currently has
-        // incomplete or corrupted data in it
-        boolean result = FileUtils.deleteQuietly(new File(filePath));
-        LOGGER.debug("result of deleting partial cache file = {}", result);
-    }
-
     private void cleanupAfterDownload(ReliableResourceStatus reliableResourceStatus) {
 
         if (reliableResourceStatus != null) {
-            // If caching was not successful, then remove this product from the pending cache list
-            // (Otherwise partially cached files will remain in pending list and returned to
-            // subsequent clients)
             if (reliableResourceStatus.getDownloadStatus()
                     != DownloadStatus.RESOURCE_DOWNLOAD_COMPLETE) {
-                if (doCaching) {
-                    resourceCache.removePendingCacheEntry(reliableResource.getKey());
-                }
+
                 if (reliableResourceStatus.getDownloadStatus()
                         == DownloadStatus.RESOURCE_DOWNLOAD_CANCELED) {
                     this.downloadState.setDownloadState(DownloadManagerState.DownloadState.CANCELED);
@@ -593,12 +527,9 @@ public class ReliableResourceDownloader implements Runnable {
             }
         }
         IOUtils.closeQuietly(countingFbos);
-        if (doCaching) {
-            IOUtils.closeQuietly(fos);
-        }
-        LOGGER.debug("Closing source InputStream");
         IOUtils.closeQuietly(resourceInputStream);
-        LOGGER.debug("Closed source InputStream");
+        LOGGER.debug("Closing source InputStream");
+
     }
 
     private void delay() {
@@ -642,6 +573,64 @@ public class ReliableResourceDownloader implements Runnable {
         return resourceResponse;
     }
 
+
+    /**
+     * Gets the download status from the reliable resource status.
+     * @return the DownloadStatus accessed through the ReliableResourceStatus object.
+     */
+    public DownloadStatus getDownloadStatus()
+    {
+       return reliableResourceStatus.getDownloadStatus();
+    }
+
+    /**
+     * Gets the entire ReliableResourceStatus object.
+     * @return the ReliableResourceStatus object, reliableResourceStatus.
+     */
+    public ReliableResourceStatus getReliableResourceStatus()
+    {
+        return reliableResourceStatus;
+    }
+
+    /**
+     * Get the bytes already downloaded of the reliable resource.
+     * @return The number of bytes already downloaded for the reliable resource.
+     */
+    public long getReliableResourceByteSize() {return reliableResourceByteSize; }
+    /**
+     * Gets the Resource object created during setup.
+     * @return the Resource object resource.
+     */
+    public Resource getResource() { return resource;}
+
+    public void setReliableResourceCallable(long bytesRead)
+    {
+        reliableResourceCallable = retrieveResource(bytesRead);
+    }
+
+    public void setDownloadState(DownloadState state)
+    {
+            this.downloadState.setDownloadState(state);
+    }
+
+    /**
+     * closes the resourceInputStream.
+     */
+    public void closeResourceInputStream()
+    {
+        IOUtils.closeQuietly(resourceInputStream);
+        LOGGER.debug("Closed source InputStream");
+    }
+
+    /**
+     * Closes the file output stream, fos, initialized in setup when taking an object passed from the
+     * ReliableResourceDownloadManager.
+     */
+    public void closeFOS()
+    {
+        IOUtils.closeQuietly(fos);
+        LOGGER.debug("Closed fos");
+    }
     @VisibleForTesting
     void setFileOutputStream(FileOutputStream fos) {
         this.fos = fos;

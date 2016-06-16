@@ -233,7 +233,8 @@
                             activities,
                             hazelcast;scope=runtime|compile,
                             commons-collections,
-                            platform-util
+                            platform-util,
+                            guava
                         </Embed-Dependency>
                         <Private-Package>
                             ddf.catalog.cache.impl,

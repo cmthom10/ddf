@@ -14,6 +14,7 @@
 package ddf.catalog.resource.download;
 
 import java.util.concurrent.ExecutorService;
+import com.google.common.util.concurrent.ListeningExecutorService;
 
 import ddf.catalog.cache.impl.ResourceCache;
 import ddf.catalog.event.retrievestatus.DownloadStatusInfo;
@@ -48,7 +49,7 @@ public class ReliableResourceDownloaderConfig {
 
     private DownloadStatusInfo downloadStatusInfo;
 
-    private ExecutorService executor;
+    private ListeningExecutorService executor;
 
     private int chunkSize = DEFAULT_CHUNK_SIZE;
 
@@ -140,11 +141,11 @@ public class ReliableResourceDownloaderConfig {
         this.downloadStatusInfo = downloadStatusInfo;
     }
 
-    public ExecutorService getExecutor() {
+    public ListeningExecutorService getExecutor() {
         return executor;
     }
 
-    public void setExecutor(ExecutorService executor) {
+    public void setExecutor(ListeningExecutorService executor) {
         this.executor = executor;
     }
 }

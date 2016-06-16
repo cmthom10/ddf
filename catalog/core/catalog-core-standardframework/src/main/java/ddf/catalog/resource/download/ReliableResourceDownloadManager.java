@@ -14,10 +14,19 @@
 package ddf.catalog.resource.download;
 
 import java.io.IOException;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import ddf.catalog.resource.Resource;
+import ddf.catalog.resource.data.ReliableResource;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,9 +57,9 @@ public class ReliableResourceDownloadManager {
 
     private ReliableResourceDownloaderConfig downloaderConfig;
 
+
     /**
-     * @param downloaderConfig
-     *            reference to the {@link ReliableResourceDownloaderConfig}
+     * @param downloaderConfig reference to the {@link ReliableResourceDownloaderConfig}
      */
     public ReliableResourceDownloadManager(ReliableResourceDownloaderConfig downloaderConfig) {
         this.downloaderConfig = downloaderConfig;
@@ -70,22 +79,24 @@ public class ReliableResourceDownloadManager {
     }
 
     /**
-     * @param resourceRequest
-     *            the original @ResourceRequest to retrieve the resource
-     * @param metacard
-     *            the @Metacard associated with the resource being downloaded
-     * @param retriever
-     *            the @ResourceRetriever to be used to get the resource
+     * @param resourceRequest the original @ResourceRequest to retrieve the resource
+     * @param metacard        the @Metacard associated with the resource being downloaded
+     * @param retriever       the @ResourceRetriever to be used to get the resource
      * @return the modified @ResourceResponse with the @ReliableResourceInputStream that the client
-     *         should read from
+     * should read from
      * @throws DownloadException
      */
     public ResourceResponse download(ResourceRequest resourceRequest, Metacard metacard,
-            ResourceRetriever retriever) throws DownloadException {
+                                     ResourceRetriever retriever) throws DownloadException {
 
         ResourceResponse resourceResponse = null;
         String downloadIdentifier = UUID.randomUUID()
                 .toString();
+        ReliableResource managerReliableResource = null;
+
+        boolean doCaching = false;
+
+        Resource resource = null;
 
         if (metacard == null) {
             throw new DownloadException("Cannot download resource if metacard is null");
@@ -98,12 +109,12 @@ public class ReliableResourceDownloadManager {
         }
 
         if (downloaderConfig.isCacheEnabled()) {
-            Resource cachedResource = downloaderConfig.getResourceCache()
+            resource = downloaderConfig.getResourceCache()
                     .getValid(new CacheKey(metacard, resourceRequest).generateKey(), metacard);
-            if (cachedResource != null) {
+            if (resource != null) {
                 resourceResponse = new ResourceResponseImpl(resourceRequest,
                         resourceRequest.getProperties(),
-                        cachedResource);
+                        resource);
                 LOGGER.debug("Successfully retrieved product from cache for metacard ID = {}",
                         metacard.getId());
             } else {
@@ -111,12 +122,15 @@ public class ReliableResourceDownloadManager {
             }
         }
 
-        if (resourceResponse == null) {
+
+        if (resource == null) {
             try {
                 resourceResponse = retriever.retrieveResource();
+                resource = resourceResponse.getResource();
             } catch (ResourceNotFoundException | ResourceNotSupportedException | IOException e) {
                 throw new DownloadException("Cannot download resource", e);
             }
+
 
             resourceResponse.getProperties()
                     .put(Metacard.ID, metacard.getId());
@@ -125,6 +139,8 @@ public class ReliableResourceDownloadManager {
             resourceResponse = new ResourceResponseImpl(resourceRequest,
                     resourceResponse.getProperties(),
                     resourceResponse.getResource());
+
+
 
             // TODO - this should be before retrieveResource() but eventPublisher requires a
             // resourceResponse and that resource response must have a resource request in it (to get
@@ -136,17 +152,73 @@ public class ReliableResourceDownloadManager {
                     0L,
                     downloadIdentifier);
 
+
             AtomicBoolean downloadStarted = new AtomicBoolean(Boolean.FALSE);
+
             ReliableResourceDownloader downloader = new ReliableResourceDownloader(downloaderConfig,
                     downloadStarted,
                     downloadIdentifier,
                     resourceResponse,
                     retriever);
-            resourceResponse = downloader.setupDownload(metacard, downloaderConfig.getDownloadStatusInfo());
+
+
+            String filePath = "";
+            FileOutputStream fos = null;
+
+
+            String key = getKey(metacard, resourceResponse);
+
+            //if the cache is not pending for this key, then create a new reliable resource using that key.
+            //Also, tell the resource cache through the downloader config that we have a new pending item.
+            if (!downloaderConfig.getResourceCache().isPending(key)) {
+
+                // Fully qualified path to cache file that will be written to.
+                // Example:
+                // <INSTALL-DIR>/data/product-cache/<source-id>-<metacard-id>
+                // <INSTALL-DIR>/data/product-cache/ddf.distribution-abc123
+                filePath = FilenameUtils.concat(downloaderConfig.getResourceCache().getProductCacheDirectory(), key);
+                managerReliableResource = new ReliableResource(key,
+                        filePath,
+                        resource.getMimeType(),
+                        resource.getName(),
+                        metacard);
+                downloaderConfig.getResourceCache().addPendingCacheEntry(managerReliableResource);
+
+                try {
+                    fos = FileUtils.openOutputStream(new File(filePath));
+                    doCaching = true;
+                } catch (IOException e1) {
+                    LOGGER.info("Unable to open cache file {} - no caching will be done.",
+                            filePath);
+                }
+            } else {
+                LOGGER.debug("Cache key {} is pending caching", key);
+            }
+
+            boolean continueDownloadingWhenCancelled = false;
+
+            if (doCaching && downloaderConfig.isCacheWhenCanceled())
+            {
+                continueDownloadingWhenCancelled = true;
+            }
+            resourceResponse = downloader.setupDownload(metacard, fos, continueDownloadingWhenCancelled);
+
+            downloaderConfig.getDownloadStatusInfo().addDownloadInfo(downloadIdentifier, downloader, resourceResponse);
 
             // Start download in separate thread so can return ResourceResponse with
             // ReliableResourceInputStream available for client to start reading from
-            downloaderConfig.getExecutor().submit(downloader);
+            // downloaderConfig.getExecutor().submit(downloader);
+            // Start download in separate thread so can return ResourceResponse with
+            // ReliableResourceInputStream available for client to start reading from
+
+            ListenableFuture downloadFuture = downloaderConfig.getExecutor().submit(downloader);
+
+            //if there is additional caching activity that is needed, such as determining the pending status, the
+            // ResourceDownloadCallback is used
+            if (doCaching) {
+                Futures.addCallback(downloadFuture, new ResourceDownloadCallback(downloader, fos,
+                        managerReliableResource, downloaderConfig.getResourceCache()));
+            }
 
             // Wait for download to get started before returning control to client
             Stopwatch stopwatch = Stopwatch.createStarted();
@@ -165,6 +237,32 @@ public class ReliableResourceDownloadManager {
             stopwatch.stop();
         }
         return resourceResponse;
+    }
+
+    /**
+     * Creates a key for a metacard.
+     *
+     * @param metacard         the metacard object to which the generated key belongs.
+     * @param resourceResponse used to generate the metacard's key.
+     * @return a string representation of the key.
+     */
+    private String getKey(Metacard metacard, ResourceResponse resourceResponse) {
+
+        String key = "empty";
+
+        if (downloaderConfig.isCacheEnabled()) {
+
+            CacheKey keyMaker = null;
+            key = null;
+            try {
+                keyMaker = new CacheKey(metacard, resourceResponse.getRequest());
+                key = keyMaker.generateKey();
+            } catch (IllegalArgumentException e) {
+                LOGGER.info("Cannot create cache key for resource with metacard ID = {}",
+                        metacard.getId());
+            }
+        }
+        return key;
     }
 
     public void setMaxRetryAttempts(int maxRetryAttempts) {

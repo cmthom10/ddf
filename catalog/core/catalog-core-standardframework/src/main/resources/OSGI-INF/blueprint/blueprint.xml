@@ -222,6 +222,11 @@
         <argument value="${org.codice.ddf.system.threadPoolSize}"/>
     </bean>
 
+    <bean id="downloadThreadPoolListener" class="com.google.common.util.concurrent.MoreExecutors"
+          factory-method="listeningDecorator">
+        <argument ref="downloadThreadPool"/>
+    </bean>
+
     <reference id="resourceActionProvider" interface="ddf.action.ActionProvider"
                filter="id=catalog.data.metacard.resource"
                availability="optional"/>
@@ -330,7 +335,7 @@
                 <property name="eventPublisher" ref="retrieveStatusEventPublisher"/>
                 <property name="eventListener" ref="retrieveStatusEventListener"/>
                 <property name="downloadStatusInfo" ref="downloadStatusInfo"/>
-                <property name="executor" ref="downloadThreadPool"/>
+                <property name="executor" ref="downloadThreadPoolListener"/>
             </bean>
         </argument>
     </bean>
