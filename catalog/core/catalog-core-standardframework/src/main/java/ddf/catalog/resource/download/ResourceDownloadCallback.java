@@ -33,8 +33,6 @@ public class ResourceDownloadCallback implements FutureCallback<Void> {
 
     private ReliableResource reliableResource;
 
-    private ReliableResourceCallable reliableResourceCallable;
-
     private static final Logger LOGGER =
             LoggerFactory.getLogger(ResourceDownloadCallback.class);
 
@@ -72,15 +70,7 @@ public class ResourceDownloadCallback implements FutureCallback<Void> {
 
         }
 
-        else if (DownloadStatus.CACHED_FILE_OUTPUT_STREAM_EXCEPTION.equals(downloader.getReliableResourceStatus()
-                .getDownloadStatus())) {
-
-            downloader.setReliableResourceCallable(bytesRead);
-            deleteCacheFile(fos);
-
-        }
-
-        if (!DownloadStatus.RESOURCE_DOWNLOAD_COMPLETE.equals(downloader.getReliableResourceStatus()
+        else if (!DownloadStatus.RESOURCE_DOWNLOAD_COMPLETE.equals(downloader.getReliableResourceStatus()
                 .getDownloadStatus())) {
 
             deleteCacheFile(fos);

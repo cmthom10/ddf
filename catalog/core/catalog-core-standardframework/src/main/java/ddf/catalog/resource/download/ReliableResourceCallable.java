@@ -19,6 +19,7 @@ import java.io.InputStream;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -248,9 +249,9 @@ public class ReliableResourceCallable implements Callable<ReliableResourceStatus
                         cacheFileOutputStream.write(buffer, 0, n);
                     } catch (IOException e) {
                         LOGGER.info("IOException during write to cached file's OutputStream", e);
-                        reliableResourceStatus =
-                                new ReliableResourceStatus(DownloadStatus.CACHED_FILE_OUTPUT_STREAM_EXCEPTION,
-                                        bytesRead.get());
+                        LOGGER.error("Unable to write to cache file", e);
+                        cacheFileOutputStream = null;
+                        IOUtils.closeQuietly(cacheFileOutputStream);
                     }
                 }
 
