@@ -13,6 +13,7 @@
  */
 package ddf.catalog.resource.download;
 
+import java.io.File;
 import java.io.FileOutputStream;
 
 import com.google.common.util.concurrent.FutureCallback;
@@ -20,6 +21,7 @@ import com.google.common.util.concurrent.FutureCallback;
 import ddf.catalog.cache.impl.ResourceCache;
 import ddf.catalog.resource.data.ReliableResource;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 
 import org.slf4j.Logger;
@@ -33,25 +35,22 @@ public class ResourceDownloadCallback implements FutureCallback<Void> {
 
     private ReliableResource reliableResource;
 
-    private static final Logger LOGGER =
-            LoggerFactory.getLogger(ResourceDownloadCallback.class);
+    private File cacheFile;
 
-    //private String filePath;
-    FileOutputStream fos = null;
+    private static final Logger LOGGER = LoggerFactory.getLogger(ResourceDownloadCallback.class);
 
-    public ResourceDownloadCallback(ReliableResourceDownloader downloader, FileOutputStream fos,
+    public ResourceDownloadCallback(ReliableResourceDownloader downloader, File cacheFile,
             ReliableResource reliableResource, ResourceCache resourceCache) {
 
-
-
         this.downloader = downloader;
-        this.fos = fos;
         this.reliableResource = reliableResource;
+        this.cacheFile = cacheFile;
         this.resourceCache = resourceCache;
     }
 
     /**
      * If the download is complete, put the reliable resource into the resource cache.
+     *
      * @param b is void.
      */
     public void onSuccess(Void b) {
@@ -60,21 +59,15 @@ public class ResourceDownloadCallback implements FutureCallback<Void> {
         long bytesRead = downloader.getReliableResourceByteSize();
 
         if (DownloadStatus.RESOURCE_DOWNLOAD_COMPLETE.equals(downloadStatus)) {
-
             LOGGER.debug("Setting reliableResource size");
             reliableResource.setSize(downloader.getReliableResourceStatus()
                     .getBytesRead());
-            LOGGER.debug("Adding caching key = {} to cache map",
-                                   reliableResource.getKey());
+            LOGGER.debug("Adding caching key = {} to cache map", reliableResource.getKey());
             resourceCache.put(reliableResource);
 
-        }
-
-        else if (!DownloadStatus.RESOURCE_DOWNLOAD_COMPLETE.equals(downloader.getReliableResourceStatus()
+        } else if (!DownloadStatus.RESOURCE_DOWNLOAD_COMPLETE.equals(downloader.getReliableResourceStatus()
                 .getDownloadStatus())) {
-
-            deleteCacheFile(fos);
-
+            FileUtils.deleteQuietly(cacheFile);
         }
 
         ReliableResourceStatus reliableResourceStatus = downloader.getReliableResourceStatus();
@@ -83,11 +76,13 @@ public class ResourceDownloadCallback implements FutureCallback<Void> {
     }
 
     public void onFailure(Throwable thrown) {
-
+        ReliableResourceStatus reliableResourceStatus = downloader.getReliableResourceStatus();
+        cleanupAfterDownload(reliableResourceStatus);
     }
 
     /**
      * Removes a pending cache entry from the reliable resource cache.
+     *
      * @param reliableResourceStatus used to get the key of the item to remove from the pending
      *                               cache.
      */
@@ -100,19 +95,5 @@ public class ResourceDownloadCallback implements FutureCallback<Void> {
 
             resourceCache.removePendingCacheEntry(reliableResource.getKey());
         }
-
-        IOUtils.closeQuietly(fos);
-    }
-
-    /**
-     * Closes the file output stream fos here and in the downloader.
-     * @param fos the file output stream to close.
-     */
-    private void deleteCacheFile(FileOutputStream fos) {
-        LOGGER.debug("Deleting partially cached file {}");
-        IOUtils.closeQuietly(fos);
-        downloader.closeFOS();
-
-
     }
 }

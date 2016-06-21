@@ -159,7 +159,7 @@ public class ReliableResourceDownloadManager {
                     retriever);
 
             String filePath = "";
-            FileOutputStream fos = null;
+            File cacheFile = null;
 
             String key = getKey(metacard, resourceResponse);
 
@@ -179,16 +179,19 @@ public class ReliableResourceDownloadManager {
                         resource.getMimeType(),
                         resource.getName(),
                         metacard);
-                downloaderConfig.getResourceCache()
-                        .addPendingCacheEntry(managerReliableResource);
 
                 try {
-                    fos = FileUtils.openOutputStream(new File(filePath));
+                    cacheFile = new File(filePath);
+                    cacheFile.createNewFile();
+                    downloaderConfig.getResourceCache()
+                            .addPendingCacheEntry(managerReliableResource);
                     doCaching = true;
-                } catch (IOException e1) {
-                    LOGGER.info("Unable to open cache file {} - no caching will be done.",
+                } catch (IOException e) {
+                    LOGGER.error("Unable to open cache file {} - no caching will be done.",
                             filePath);
+                    cacheFile = null;
                 }
+
             } else {
                 LOGGER.debug("Cache key {} is pending caching", key);
             }
@@ -199,7 +202,7 @@ public class ReliableResourceDownloadManager {
                 continueDownloadingWhenCancelled = true;
             }
             resourceResponse = downloader.setupDownload(metacard,
-                    fos,
+                    cacheFile,
                     continueDownloadingWhenCancelled);
 
             downloaderConfig.getDownloadStatusInfo()
@@ -217,10 +220,9 @@ public class ReliableResourceDownloadManager {
             //if there is additional caching activity that is needed, such as determining the pending status, the
             // ResourceDownloadCallback is used
             if (doCaching) {
-
                 Futures.addCallback(downloadFuture,
                         new ResourceDownloadCallback(downloader,
-                                fos,
+                                cacheFile,
                                 managerReliableResource,
                                 downloaderConfig.getResourceCache()));
             }

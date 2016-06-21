@@ -76,7 +76,7 @@ public class ReliableResourceDownloader implements Runnable {
 
     private ReliableResourceInputStream streamReadByClient;
 
-    private FileOutputStream fos;
+    private File cacheFile;
 
     private FileBackedOutputStream fbos;
 
@@ -106,12 +106,8 @@ public class ReliableResourceDownloader implements Runnable {
 
     private boolean continueDownloadingWhenCancelled = false;
 
-    private Consumer<DownloadStatus> downloadStatusListener = new Consumer<DownloadStatus>()
-    {
-        @Override
-        public void accept(DownloadStatus downloadStatus) {
+    private Consumer<DownloadStatus> downloadStatusListener = downloadStatus -> {
 
-        }
     };
 
     /**
@@ -119,15 +115,14 @@ public class ReliableResourceDownloader implements Runnable {
      * pending caching, e.g., another client has already started downloading and caching it.
      */
 
-
-        public ReliableResourceDownloader(ReliableResourceDownloaderConfig downloaderConfig,
-                AtomicBoolean downloadStarted, String downloadIdentifier,
-                ResourceResponse resourceResponse, ResourceRetriever retriever) {
-            this.downloadStarted = downloadStarted;
-            this.downloaderConfig = downloaderConfig;
-            this.downloadIdentifier = downloadIdentifier;
-            this.resourceResponse = resourceResponse;
-            this.retriever = retriever;
+    public ReliableResourceDownloader(ReliableResourceDownloaderConfig downloaderConfig,
+            AtomicBoolean downloadStarted, String downloadIdentifier,
+            ResourceResponse resourceResponse, ResourceRetriever retriever) {
+        this.downloadStarted = downloadStarted;
+        this.downloaderConfig = downloaderConfig;
+        this.downloadIdentifier = downloadIdentifier;
+        this.resourceResponse = resourceResponse;
+        this.retriever = retriever;
 
         this.downloadState = new DownloadManagerState();
         this.downloadState.setDownloadState(DownloadManagerState.DownloadState.NOT_STARTED);
@@ -135,16 +130,18 @@ public class ReliableResourceDownloader implements Runnable {
         this.eventListener = downloaderConfig.getEventListener();
         this.eventPublisher = downloaderConfig.getEventPublisher();
 
-           // downloadStatusListener = new DownloadStatusListenerConsumer(this, downloaderConfig);
+        // downloadStatusListener = new DownloadStatusListenerConsumer(this, downloaderConfig);
     }
 
     /**
      * Setup before the downloader is run.
-     * @param metacard the metacard associated with the file to be downloaded.
-     * @param fos A file output stream that may arrive null.
+     *
+     * @param metacard  the metacard associated with the file to be downloaded.
+     * @param cacheFile A cache File that may arrive null.
      * @return the resourceResponse at the end of the setup.
      */
-    public ResourceResponse setupDownload(Metacard metacard, FileOutputStream fos, boolean continueDownloadingWhenCancelled) {
+    public ResourceResponse setupDownload(Metacard metacard, File cacheFile,
+            boolean continueDownloadingWhenCancelled) {
         resource = resourceResponse.getResource();
         MimeType mimeType = resource.getMimeType();
         String resourceName = resource.getName();
@@ -158,7 +155,7 @@ public class ReliableResourceDownloader implements Runnable {
                 resourceResponse);
 
         this.metacard = metacard;
-        this.fos = fos;
+        this.cacheFile = cacheFile;
         this.continueDownloadingWhenCancelled = continueDownloadingWhenCancelled;
 
         // Create new ResourceResponse to return that will encapsulate the
@@ -184,7 +181,7 @@ public class ReliableResourceDownloader implements Runnable {
         try {
             reliableResourceCallable = new ReliableResourceCallable(resourceInputStream,
                     countingFbos,
-                    fos,
+                    cacheFile,
                     downloaderConfig.getChunkSize(),
                     lock);
             downloadFuture = null;
@@ -283,9 +280,6 @@ public class ReliableResourceDownloader implements Runnable {
                 } else {
                     bytesRead = reliableResourceStatus.getBytesRead();
                     LOGGER.debug("Download not complete, only read {} bytes", bytesRead);
-                    if (fos != null) {
-                        fos.flush();
-                    }
 
                     // Synchronized so that the Callable is not shutdown while in the middle of
                     // writing to the
@@ -301,7 +295,6 @@ public class ReliableResourceDownloader implements Runnable {
                         // while loop fixes this.
                         downloadExecutor.shutdownNow();
                     }
-
 
                     if (DownloadStatus.PRODUCT_INPUT_STREAM_EXCEPTION.equals(reliableResourceStatus.getDownloadStatus())) {
 
@@ -339,7 +332,7 @@ public class ReliableResourceDownloader implements Runnable {
                         LOGGER.debug("Cancelling resourceRetrievalMonitor");
                         resourceRetrievalMonitor.cancel();
                         reliableResourceCallable = new ReliableResourceCallable(resourceInputStream,
-                                fos,
+                                cacheFile,
                                 downloaderConfig.getChunkSize(),
                                 lock);
                         reliableResourceCallable.setBytesRead(bytesRead);
@@ -362,7 +355,7 @@ public class ReliableResourceDownloader implements Runnable {
                             LOGGER.debug("Continuing to cache product");
                             reliableResourceCallable = new ReliableResourceCallable(
                                     resourceInputStream,
-                                    fos,
+                                    cacheFile,
                                     downloaderConfig.getChunkSize(),
                                     lock);
                             reliableResourceCallable.setBytesRead(bytesRead);
@@ -409,17 +402,9 @@ public class ReliableResourceDownloader implements Runnable {
                             "Unable to retrieve product file.",
                             reliableResourceStatus.getBytesRead(),
                             downloadIdentifier);
+                    FileUtils.deleteQuietly(cacheFile);
                 }
             }
-        } catch (IOException e) {
-            LOGGER.error("Unable to store product file {}", filePath, e);
-            downloadState.setDownloadState(DownloadState.FAILED);
-            eventPublisher.postRetrievalStatus(resourceResponse,
-                    ProductRetrievalStatus.FAILED,
-                    metacard,
-                    "Unable to store product file.",
-                    reliableResourceStatus.getBytesRead(),
-                    downloadIdentifier);
         } finally {
             reliableResourceByteSize = bytesRead;
             cleanupAfterDownload(reliableResourceStatus);
@@ -474,7 +459,7 @@ public class ReliableResourceDownloader implements Runnable {
 
             reliableResourceCallable = new ReliableResourceCallable(resourceInputStream,
                     countingFbos,
-                    fos,
+                    cacheFile,
                     downloaderConfig.getChunkSize(),
                     lock);
 
@@ -554,74 +539,62 @@ public class ReliableResourceDownloader implements Runnable {
         return resourceResponse;
     }
 
-
     /**
      * Gets the download status from the reliable resource status.
+     *
      * @return the DownloadStatus accessed through the ReliableResourceStatus object.
      */
-    public DownloadStatus getDownloadStatus()
-    {
-       return reliableResourceStatus.getDownloadStatus();
+    public DownloadStatus getDownloadStatus() {
+        return reliableResourceStatus.getDownloadStatus();
     }
 
     /**
      * Gets the entire ReliableResourceStatus object.
+     *
      * @return the ReliableResourceStatus object, reliableResourceStatus.
      */
-    public ReliableResourceStatus getReliableResourceStatus()
-    {
+    public ReliableResourceStatus getReliableResourceStatus() {
         return reliableResourceStatus;
     }
 
     /**
      * Get the bytes already downloaded of the reliable resource.
+     *
      * @return The number of bytes already downloaded for the reliable resource.
      */
-    public long getReliableResourceByteSize() {return reliableResourceByteSize; }
+    public long getReliableResourceByteSize() {
+        return reliableResourceByteSize;
+    }
+
     /**
      * Gets the Resource object created during setup.
+     *
      * @return the Resource object resource.
      */
-    public Resource getResource() { return resource;}
+    public Resource getResource() {
+        return resource;
+    }
 
-//    public void setReliableResourceCallable(long bytesRead)
-//    {
-//        reliableResourceCallable = retrieveResource(bytesRead);
-//    }
+    //    public void setReliableResourceCallable(long bytesRead)
+    //    {
+    //        reliableResourceCallable = retrieveResource(bytesRead);
+    //    }
 
-    public void setDownloadState(DownloadState state)
-    {
-            this.downloadState.setDownloadState(state);
+    public void setDownloadState(DownloadState state) {
+        this.downloadState.setDownloadState(state);
     }
 
     /**
      * closes the resourceInputStream.
      */
-    public void closeResourceInputStream()
-    {
+    public void closeResourceInputStream() {
         IOUtils.closeQuietly(resourceInputStream);
         LOGGER.debug("Closed source InputStream");
     }
 
-    /**
-     * Closes the file output stream, fos, initialized in setup when taking an object passed from the
-     * ReliableResourceDownloadManager.
-     */
-    public void closeFOS()
-    {
-        IOUtils.closeQuietly(fos);
-        LOGGER.debug("Closed fos");
-    }
-
-    public void setDownloadStatusChangeListener(Consumer<DownloadStatus> listener)
-    {
-
-        downloadStatusListener = listener;
-    }
-
     @VisibleForTesting
-    void setFileOutputStream(FileOutputStream fos) {
-        this.fos = fos;
+    void setFile(File cacheFile) {
+        this.cacheFile = cacheFile;
     }
 
     @VisibleForTesting
