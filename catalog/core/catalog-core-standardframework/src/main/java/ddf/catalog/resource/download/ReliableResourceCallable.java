@@ -204,7 +204,7 @@ public class ReliableResourceCallable implements Callable<ReliableResourceStatus
         int chunkCount = 0;
 
         // File will not exist if there was a previous cache write failure
-        if(cacheFile.exists()){
+        if(!cacheFile.exists()){
             cacheFileOutputStream = null;
         }
 
