@@ -14,7 +14,6 @@
 package ddf.catalog.resource.download;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
@@ -206,7 +205,7 @@ public class ReliableResourceDownloader implements Runnable {
                             reliableResourceStatus.getBytesRead(),
                             downloadIdentifier);
                     delay();
-                    reliableResourceCallable = retrieveResource(bytesRead);
+                    reliableResourceCallable = retrieveResourceWithOffset(bytesRead);
                     continue;
                 }
                 retryAttempts++;
@@ -312,7 +311,7 @@ public class ReliableResourceDownloader implements Runnable {
                         IOUtils.closeQuietly(resourceInputStream);
                         resourceInputStream = null;
                         delay();
-                        reliableResourceCallable = retrieveResource(bytesRead);
+                        reliableResourceCallable = retrieveResourceWithOffset(bytesRead);
                     } else if (DownloadStatus.CLIENT_OUTPUT_STREAM_EXCEPTION.equals(
                             reliableResourceStatus.getDownloadStatus())) {
 
@@ -327,15 +326,15 @@ public class ReliableResourceDownloader implements Runnable {
                                 "",
                                 reliableResourceStatus.getBytesRead(),
                                 downloadIdentifier);
-                        IOUtils.closeQuietly(fbos);
-                        IOUtils.closeQuietly(countingFbos);
                         LOGGER.debug("Cancelling resourceRetrievalMonitor");
                         resourceRetrievalMonitor.cancel();
+                        closeAndNullUserOutputStreams();
                         reliableResourceCallable = new ReliableResourceCallable(resourceInputStream,
                                 cacheFile,
                                 downloaderConfig.getChunkSize(),
                                 lock);
                         reliableResourceCallable.setBytesRead(bytesRead);
+
 
                     } else if (DownloadStatus.RESOURCE_DOWNLOAD_CANCELED.equals(
                             reliableResourceStatus.getDownloadStatus())) {
@@ -353,8 +352,8 @@ public class ReliableResourceDownloader implements Runnable {
                                 downloadIdentifier);
                         if (continueDownloadingWhenCancelled) {
                             LOGGER.debug("Continuing to cache product");
-                            reliableResourceCallable = new ReliableResourceCallable(
-                                    resourceInputStream,
+                            closeAndNullUserOutputStreams();
+                            reliableResourceCallable = new ReliableResourceCallable(resourceInputStream,
                                     cacheFile,
                                     downloaderConfig.getChunkSize(),
                                     lock);
@@ -387,7 +386,7 @@ public class ReliableResourceDownloader implements Runnable {
                                 reliableResourceStatus.getBytesRead(),
                                 downloadIdentifier);
                         delay();
-                        reliableResourceCallable = retrieveResource(bytesRead);
+                        reliableResourceCallable = retrieveResourceWithOffset(bytesRead);
                     }
                 }
             }
@@ -412,7 +411,7 @@ public class ReliableResourceDownloader implements Runnable {
         }
     }
 
-    private ReliableResourceCallable retrieveResource(long bytesRead) {
+    private ReliableResourceCallable retrieveResourceWithOffset(long bytesRead) {
 
         ReliableResourceCallable reliableResourceCallable = null;
 
@@ -521,6 +520,19 @@ public class ReliableResourceDownloader implements Runnable {
         }
     }
 
+    private void closeAndNullUserOutputStreams() {
+        try {
+            fbos.reset();
+        } catch (IOException e){
+            LOGGER.error("Error closing file-backed user output stream", e);
+        }
+        IOUtils.closeQuietly(fbos);
+        IOUtils.closeQuietly(countingFbos);
+
+        fbos = null;
+        countingFbos = null;
+    }
+
     public Long getReliableResourceInputStreamBytesCached() {
         return streamReadByClient.getBytesCached();
     }
@@ -577,7 +589,7 @@ public class ReliableResourceDownloader implements Runnable {
 
     //    public void setReliableResourceCallable(long bytesRead)
     //    {
-    //        reliableResourceCallable = retrieveResource(bytesRead);
+    //        reliableResourceCallable = retrieveResourceWithOffset(bytesRead);
     //    }
 
     public void setDownloadState(DownloadState state) {
