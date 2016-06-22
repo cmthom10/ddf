@@ -113,7 +113,7 @@ public class ReliableResourceDownloaderTest {
                 DOWNLOAD_ID,
                 mockResponse,
                 getMockRetriever());
-        downloader.setupDownload(mockMetacard, new DownloadStatusInfoImpl());
+        downloader.setupDownload(mockMetacard, new File("test"), false);
         downloader.run();
 
         verify(mockPublisher, times(retries)).postRetrievalStatus(any(ResourceResponse.class),
@@ -143,13 +143,14 @@ public class ReliableResourceDownloaderTest {
                 "123",
                 mockResponse,
                 getMockRetriever());
-        downloader.setupDownload(mockMetacard, new DownloadStatusInfoImpl());
+        downloader.setupDownload(mockMetacard, new File("test"), false);
 
         FileOutputStream mockFos = mock(FileOutputStream.class);
         doThrow(new IOException()).when(mockFos)
                 .write(any(byte[].class), anyInt(), anyInt());
 
-        downloader.setFileOutputStream(mockFos);
+        File testFile = new File("test");
+        downloader.setFile(testFile);
         downloader.run();
 
         verify(mockPublisher, times(1)).postRetrievalStatus(any(ResourceResponse.class),
@@ -183,7 +184,7 @@ public class ReliableResourceDownloaderTest {
                 "123",
                 mockResponse,
                 getMockRetriever());
-        downloader.setupDownload(mockMetacard, new DownloadStatusInfoImpl());
+        downloader.setupDownload(mockMetacard, new File("test"), false);
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         CountingOutputStream mockCountingFbos = new CountingOutputStream(baos);

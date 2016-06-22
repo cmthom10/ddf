@@ -40,6 +40,9 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.io.CountingOutputStream;
 import com.google.common.io.FileBackedOutputStream;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 
 import ddf.catalog.operation.ResourceResponse;
 
@@ -190,8 +193,8 @@ public class ReliableResourceInputStreamTest {
             }
         };
 
-        ExecutorService executor = Executors.newCachedThreadPool();
-        Future<Integer> future = executor.submit(callable);
+        ListeningExecutorService executor = MoreExecutors.listeningDecorator(Executors.newCachedThreadPool());
+        ListenableFuture<Integer> future = executor.submit(callable);
 
         // Write second string to FileBackedOutputStream - ReliableResourceInputStream's running
         // read(byte[], off, len) method is in loop waiting for new bytes to be written and should
