@@ -46,7 +46,6 @@ import ddf.catalog.operation.impl.ResourceResponseImpl;
 import ddf.catalog.resource.Resource;
 import ddf.catalog.resource.ResourceNotFoundException;
 import ddf.catalog.resource.ResourceNotSupportedException;
-import ddf.catalog.resource.data.ReliableResource;
 import ddf.catalog.resource.download.DownloadManagerState.DownloadState;
 import ddf.catalog.resource.impl.ResourceImpl;
 import ddf.catalog.resourceretriever.ResourceRetriever;
@@ -81,8 +80,6 @@ public class ReliableResourceDownloader implements Runnable {
     private FileBackedOutputStream fbos;
 
     private CountingOutputStream countingFbos;
-
-    private ReliableResource reliableResource;
 
     private DownloadManagerState downloadState;
 
@@ -586,18 +583,6 @@ public class ReliableResourceDownloader implements Runnable {
      */
     public Resource getResource() {
         return resource;
-    }
-
-    public void setDownloadState(DownloadState state) {
-        this.downloadState.setDownloadState(state);
-    }
-
-    /**
-     * closes the resourceInputStream.
-     */
-    public void closeResourceInputStream() {
-        IOUtils.closeQuietly(resourceInputStream);
-        LOGGER.debug("Closed source InputStream");
     }
 
     @VisibleForTesting

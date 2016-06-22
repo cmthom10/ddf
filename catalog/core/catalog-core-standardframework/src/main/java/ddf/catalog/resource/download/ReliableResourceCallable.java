@@ -26,20 +26,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.io.CountingOutputStream;
+import com.google.common.io.FileBackedOutputStream;
 
 /**
- * ReliableResourceCallable is responsible for reading product data from its @InputStream and then writing that data
- * to a @FileBackedOutputStream (that will be concurrently read by a client), and optionally caching the product to
- * the file system. It is a @Callable that is started via a @Future by the @ReliableResourceDownloadManager class.
+ * ReliableResourceCallable is responsible for reading product data from its {@link InputStream} and then writing that data
+ * to a {@link FileBackedOutputStream} (that will be concurrently read by a client), and optionally caching the product to
+ * the file system. It is a {@link Callable} that is started via a @Future by the {@link ReliableResourceDownloadManager} class.
  *
- * The client uses the @ReliableResourceInputStream to read from the @FileBackedOutputStream.
+ * The client uses the {@link ReliableResourceInputStream} to read from the {@link FileBackedOutputStream}.
  *
  * This class will read bytes in chunks (whose size is specified by the caller) until it either reaches the EOF or it
- * is interrupted (either by an @IOException or the @CachedResource).
+ * is interrupted (either by an {@link IOException} or the cached resource}).
  *
- * If the @InputStream is read until the EOF, then a -1 is returned indicating the entire stream was read successfully.
+ * If the {@link InputStream} is read until the EOF, then a -1 is returned indicating the entire stream was read successfully.
  * Otherwise, the number of bytes read thus far is returned so that the caller can react accordingly (e.g., reopen the
- * product @InputStream and skip forward that many bytes already read).
+ * product {@link InputStream} and skip forward that many bytes already read).
  */
 public class ReliableResourceCallable implements Callable<ReliableResourceStatus> {
 
@@ -72,7 +73,7 @@ public class ReliableResourceCallable implements Callable<ReliableResourceStatus
     private boolean cancelDownload = false;
 
     /**
-     * Used when only downloading, no caching to @FileOutputStream because caching was disabled or
+     * Used when only downloading, no caching to {@link FileOutputStream} because caching was disabled or
      * had previous failed attempt trying to cache the product.
      *
      * @param input
@@ -85,7 +86,7 @@ public class ReliableResourceCallable implements Callable<ReliableResourceStatus
     }
 
     /**
-     * Used when only caching, no writing to @FileBackedOutputStream because no client is
+     * Used when only caching, no writing to {@link FileBackedOutputStream} because no client is
      * reading from it.
      *
      * @param input
@@ -99,9 +100,9 @@ public class ReliableResourceCallable implements Callable<ReliableResourceStatus
     /**
      * Used when downloading and caching the product.
      *
-     * @param input        the product @InputStream
+     * @param input        the product {@link InputStream}
      * @param countingFbos the FileBackedOutputStream that is written to, number of bytes written to it are counted
-     * @param cacheFile    the @File that the cached product is written to
+     * @param cacheFile    the {@link File} that the cached product is written to
      * @param chunkSize    the number of bytes to read from the product @InputStream per chunk
      */
     public ReliableResourceCallable(InputStream input, CountingOutputStream countingFbos,
@@ -158,7 +159,7 @@ public class ReliableResourceCallable implements Callable<ReliableResourceStatus
 
     /**
      * Set to true to indicate that the current resource download should be interrupted. Usually
-     * set by the @ResourceRetrievalMonitor when there has been a pause of n seconds where no bytes
+     * set by the {@link ResourceRetrievalMonitor} when there has been a pause of n seconds where no bytes
      * have been read from the resource's @InputStream.
      *
      * @param interruptDownload
@@ -180,7 +181,7 @@ public class ReliableResourceCallable implements Callable<ReliableResourceStatus
 
     /**
      * Set to true when the current resource download should be canceled. Usually set by the
-     * @ReliableResourceInputStream when it is closed by the client.
+     * {@link ReliableResourceInputStream} when it is closed by the client.
      *
      * @param cancelDownload
      */
@@ -204,7 +205,7 @@ public class ReliableResourceCallable implements Callable<ReliableResourceStatus
         int chunkCount = 0;
 
         // File will not exist if there was a previous cache write failure
-        if (!cacheFile.exists()) {
+        if (cacheFile != null && !cacheFile.exists()) {
             cacheFileOutputStream = null;
         }
 

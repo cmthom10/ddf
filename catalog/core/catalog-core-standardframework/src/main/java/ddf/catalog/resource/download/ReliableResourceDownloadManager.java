@@ -73,20 +73,11 @@ public class ReliableResourceDownloadManager {
 
     }
 
-    public void cleanUp() {
-        executor.shutdown();
-        try {
-            executor.awaitTermination(ONE_SECOND_IN_MS, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            executor.shutdownNow();
-        }
-    }
-
     /**
      * @param resourceRequest the original {@link ResourceRequest} to retrieve the resource
      * @param metacard        the {@link Metacard} associated with the resource being downloaded
-     * @param retriever       the @ResourceRetriever to be used to get the resource
-     * @return the modified @ResourceResponse with the @ReliableResourceInputStream that the client
+     * @param retriever       the {@link ResourceRetriever} to be used to get the resource
+     * @return the modified {@link ResourceResponse} with the {@link ReliableResourceInputStream} that the client
      * should read from
      * @throws DownloadException
      */

@@ -51,9 +51,7 @@ public class ResourceDownloadCallback implements FutureCallback<Void> {
      * @param b is void.
      */
     public void onSuccess(Void b) {
-
         DownloadStatus downloadStatus = downloader.getDownloadStatus();
-        long bytesRead = downloader.getReliableResourceByteSize();
 
         if (DownloadStatus.RESOURCE_DOWNLOAD_COMPLETE.equals(downloadStatus)) {
             LOGGER.debug("Setting reliableResource size");
@@ -84,12 +82,10 @@ public class ResourceDownloadCallback implements FutureCallback<Void> {
      *                               cache.
      */
     private void cleanupAfterDownload(ReliableResourceStatus reliableResourceStatus) {
-
         if (reliableResourceStatus != null) {
             // If caching was not successful, then remove this product from the pending cache list
             // (Otherwise partially cached files will remain in pending list and returned to
             // subsequent clients)
-
             resourceCache.removePendingCacheEntry(reliableResource.getKey());
         }
     }
