@@ -126,45 +126,6 @@ public class ReliableResourceDownloaderTest {
     }
 
     @Test
-    public void testCacheExceptionDuringWrite() throws Exception {
-
-        downloaderConfig.setCacheEnabled(true);
-
-        ResourceCacheImpl mockCache = mock(ResourceCacheImpl.class);
-        when(mockCache.isPending(anyString())).thenReturn(false);
-        when(mockCache.getProductCacheDirectory()).thenReturn(productCacheDirectory);
-        downloaderConfig.setResourceCache(mockCache);
-
-        mis = new MockInputStream(productInputFilename);
-        ResourceResponse mockResponse = getMockResourceResponse(mis);
-
-        ReliableResourceDownloader downloader = new ReliableResourceDownloader(downloaderConfig,
-                new AtomicBoolean(),
-                "123",
-                mockResponse,
-                getMockRetriever());
-        downloader.setupDownload(mockMetacard, new File("test"), false);
-
-        FileOutputStream mockFos = mock(FileOutputStream.class);
-        doThrow(new IOException()).when(mockFos)
-                .write(any(byte[].class), anyInt(), anyInt());
-
-        File testFile = new File("test");
-        downloader.setFile(testFile);
-        downloader.run();
-
-        verify(mockPublisher, times(1)).postRetrievalStatus(any(ResourceResponse.class),
-                eq(ProductRetrievalStatus.RETRYING),
-                any(Metacard.class),
-                anyString(),
-                anyLong(),
-                eq(DOWNLOAD_ID));
-        verify(mockCache, times(1)).removePendingCacheEntry(anyString());
-        assertThat(downloaderConfig.isCacheEnabled(), is(false));
-
-    }
-
-    @Test
     @Ignore
     // Can't figure out how to throw IOExcetion from CountingOutputStream
     public void testClientOutputStreamException() throws Exception {

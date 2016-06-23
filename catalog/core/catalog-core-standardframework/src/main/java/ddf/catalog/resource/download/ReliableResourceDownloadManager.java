@@ -236,10 +236,11 @@ public class ReliableResourceDownloadManager {
 
             try {
                 cacheFile = new File(filePath);
-                cacheFile.createNewFile();
-                downloaderConfig.getResourceCache()
-                        .addPendingCacheEntry(managerReliableResource);
-                doCaching = true;
+                if (cacheFile.canWrite() || cacheFile.createNewFile()) {
+                    downloaderConfig.getResourceCache()
+                            .addPendingCacheEntry(managerReliableResource);
+                    doCaching = true;
+                }
             } catch (IOException e) {
                 LOGGER.error("Unable to open cache file {} - no caching will be done.", filePath);
                 cacheFile = null;
