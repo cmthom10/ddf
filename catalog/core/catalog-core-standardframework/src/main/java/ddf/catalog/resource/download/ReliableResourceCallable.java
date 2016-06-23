@@ -26,18 +26,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.io.CountingOutputStream;
-import com.google.common.io.FileBackedOutputStream;
 
 /**
  * ReliableResourceCallable is responsible for reading product data from its {@link InputStream} and then writing that data
- * to a {@link FileBackedOutputStream} (that will be concurrently read by a client), and optionally caching the product to
+ * to a {@link CountingOutputStream} (that will be concurrently read by a client), and optionally caching the product to
  * the file system. It is a {@link Callable} that is started via a @Future by the {@link ReliableResourceDownloadManager} class.
- *
- * The client uses the {@link ReliableResourceInputStream} to read from the {@link FileBackedOutputStream}.
- *
+ * <p>
+ * The client uses the {@link ReliableResourceInputStream} to read from the {@link CountingOutputStream}.
+ * <p>
  * This class will read bytes in chunks (whose size is specified by the caller) until it either reaches the EOF or it
  * is interrupted (either by an {@link IOException} or the cached resource}).
- *
+ * <p>
  * If the {@link InputStream} is read until the EOF, then a -1 is returned indicating the entire stream was read successfully.
  * Otherwise, the number of bytes read thus far is returned so that the caller can react accordingly (e.g., reopen the
  * product {@link InputStream} and skip forward that many bytes already read).
@@ -86,7 +85,7 @@ public class ReliableResourceCallable implements Callable<ReliableResourceStatus
     }
 
     /**
-     * Used when only caching, no writing to {@link FileBackedOutputStream} because no client is
+     * Used when only caching, no writing to {@link CountingOutputStream} because no client is
      * reading from it.
      *
      * @param input

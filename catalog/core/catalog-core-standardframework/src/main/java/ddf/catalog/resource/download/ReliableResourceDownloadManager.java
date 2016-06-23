@@ -165,10 +165,6 @@ public class ReliableResourceDownloadManager {
         this.downloaderConfig.setMonitorInitialDelayMS(monitorInitialDelay * ONE_SECOND_IN_MS);
     }
 
-    public void setCacheEnabled(boolean cacheEnabled) {
-        downloaderConfig.setCacheEnabled(cacheEnabled);
-    }
-
     public void setCacheWhenCanceled(boolean cacheWhenCanceled) {
         downloaderConfig.setCacheWhenCanceled(cacheWhenCanceled);
     }
@@ -183,6 +179,10 @@ public class ReliableResourceDownloadManager {
 
     public boolean isCacheEnabled() {
         return downloaderConfig.isCacheEnabled();
+    }
+
+    public void setCacheEnabled(boolean cacheEnabled) {
+        downloaderConfig.setCacheEnabled(cacheEnabled);
     }
 
     public void setProductCacheDirectory(String productCacheDirectory) {

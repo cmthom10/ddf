@@ -24,7 +24,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.UUID;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
@@ -193,7 +192,8 @@ public class ReliableResourceInputStreamTest {
             }
         };
 
-        ListeningExecutorService executor = MoreExecutors.listeningDecorator(Executors.newCachedThreadPool());
+        ListeningExecutorService executor =
+                MoreExecutors.listeningDecorator(Executors.newCachedThreadPool());
         ListenableFuture<Integer> future = executor.submit(callable);
 
         // Write second string to FileBackedOutputStream - ReliableResourceInputStream's running

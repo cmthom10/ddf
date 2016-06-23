@@ -29,18 +29,19 @@ import org.junit.Test;
 import ddf.catalog.cache.ResourceCacheInterface;
 import ddf.catalog.resource.data.ReliableResource;
 
-
-public class ResourceDownloadCallbackTest
-{
+public class ResourceDownloadCallbackTest {
     private ReliableResourceDownloader downloader;
+
     private File cacheFile;
+
     private ReliableResource reliableResource;
+
     private ResourceCacheInterface resourceCache;
+
     private ReliableResourceStatus reliableResourceStatus;
 
     @Before
-    public void setup()
-    {
+    public void setup() {
         downloader = mock(ReliableResourceDownloader.class);
         cacheFile = mock(File.class);
         reliableResource = mock(ReliableResource.class);
@@ -54,15 +55,17 @@ public class ResourceDownloadCallbackTest
      * to the resource cache. Finally, the pending cache entry is removed from the resource cache.
      */
     @Test
-    public void onSuccessDownloadComplete() throws Exception
-    {
+    public void onSuccessDownloadComplete() throws Exception {
         when(downloader.getDownloadStatus()).thenReturn(DownloadStatus.RESOURCE_DOWNLOAD_COMPLETE);
         when(downloader.getReliableResourceByteSize()).thenReturn(100L);
         when(downloader.getReliableResourceStatus()).thenReturn(reliableResourceStatus);
 
         when(reliableResource.getKey()).thenReturn("something");
 
-        ResourceDownloadCallback resourceDownloadCallback = new ResourceDownloadCallback(downloader, cacheFile, reliableResource, resourceCache);
+        ResourceDownloadCallback resourceDownloadCallback = new ResourceDownloadCallback(downloader,
+                cacheFile,
+                reliableResource,
+                resourceCache);
 
         resourceDownloadCallback.onSuccess(null);
 
@@ -79,15 +82,17 @@ public class ResourceDownloadCallbackTest
      * entry from the resource cache.
      */
     @Test
-    public void onSuccessDownloadNotComplete() throws Exception
-    {
+    public void onSuccessDownloadNotComplete() throws Exception {
         when(downloader.getDownloadStatus()).thenReturn(DownloadStatus.RESOURCE_DOWNLOAD_INTERRUPTED);
         when(downloader.getReliableResourceStatus()).thenReturn(reliableResourceStatus);
         when(reliableResourceStatus.getDownloadStatus()).thenReturn(DownloadStatus.RESOURCE_DOWNLOAD_INTERRUPTED);
 
         when(reliableResource.getKey()).thenReturn("something");
 
-        ResourceDownloadCallback resourceDownloadCallback = new ResourceDownloadCallback(downloader, cacheFile, reliableResource, resourceCache);
+        ResourceDownloadCallback resourceDownloadCallback = new ResourceDownloadCallback(downloader,
+                cacheFile,
+                reliableResource,
+                resourceCache);
 
         resourceDownloadCallback.onSuccess(null);
 
@@ -103,13 +108,15 @@ public class ResourceDownloadCallbackTest
      * Checks that the pending cache entry is removed, even if the downloader indicates a failure.
      */
     @Test
-    public void onFailure() throws Exception
-    {
+    public void onFailure() throws Exception {
         when(downloader.getReliableResourceStatus()).thenReturn(reliableResourceStatus);
 
         when(reliableResource.getKey()).thenReturn("something");
 
-        ResourceDownloadCallback resourceDownloadCallback = new ResourceDownloadCallback(downloader, cacheFile, reliableResource, resourceCache);
+        ResourceDownloadCallback resourceDownloadCallback = new ResourceDownloadCallback(downloader,
+                cacheFile,
+                reliableResource,
+                resourceCache);
 
         resourceDownloadCallback.onFailure(null);
 
