@@ -13,14 +13,8 @@
  */
 package ddf.catalog.resource.download;
 
-import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
-import static org.mockito.Matchers.anyChar;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Matchers.isNotNull;
-import static org.mockito.Matchers.isNull;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -29,6 +23,7 @@ import static org.mockito.Mockito.any;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -40,7 +35,6 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-import org.mockito.ArgumentCaptor;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
@@ -61,14 +55,12 @@ public class ReliableResourceCallableTest {
     private ByteArrayOutputStream streamArray = new ByteArrayOutputStream();
     private CountingOutputStream countingFbos = new CountingOutputStream(streamArray);
 
-    private FileOutputStream cacheFileOutputStream = null;
-
     @Rule
     public TemporaryFolder testFolder = new TemporaryFolder();
 
-    private File cacheFile;
-
     public File testFile;
+
+    private FileInputStream cacheFis;
 
     private int chunkSize;
 
@@ -77,23 +69,23 @@ public class ReliableResourceCallableTest {
 
     @Before
     public void setup() throws IOException {
+
         bytesRead = new AtomicLong(0);
         lock = mock(Object.class);
         input = mock(InputStream.class);
-        //countingFbos = null;
-        cacheFileOutputStream = mock(FileOutputStream.class);
-        cacheFile = mock(File.class);
         testFile = testFolder.newFile("test.txt");
         chunkSize = 0;
         reliableResourceStatus = mock(ReliableResourceStatus.class);
+        cacheFis = new FileInputStream(testFile);
+
     }
 
-    @Test
     /**
      * Checks that the value returned by getBytesRead changes to a new value after setBytesRead
      * has been passed a new value.
      */
-    public void setBytesReadChangeValue() throws Exception
+    @Test
+    public void setBytesReadChangesValue() throws Exception
     {
 
         ReliableResourceCallable testReliableResourceCallable = new ReliableResourceCallable(input, countingFbos,
@@ -105,13 +97,13 @@ public class ReliableResourceCallableTest {
         assertThat(testReliableResourceCallable.getBytesRead(), is(15L));
     }
 
-    @Test
     /**
      * Checks that when passed a true value, the set interrupt download recreates the reliable
      * resource status with the new interrupted status and the number of bytes in bytesRead.
      * Determines if the bytesRead are correct by comparing with what is returned by the
      * reliable resource status's getBytesRead method.
      */
+    @Test
     public void setInterruptDownloadToTrue() throws Exception
     {
 
@@ -124,13 +116,13 @@ public class ReliableResourceCallableTest {
         assertThat(testReliableResourceCallable.getReliableResourceStatus().getBytesRead(), is(0L));
     }
 
-    @Test
     /**
      * Checks that when passed a true value, the set cancel download recreates the reliable
      * resource status with the new cancelled status and the number of bytes in bytesRead.
      * Determines if the bytesRead are correct by comparing with what is returned by the
      * reliable resource status's getBytesRead method.
      */
+    @Test
     public void setCancelDownloadToTrue() throws Exception
     {
 
@@ -144,10 +136,11 @@ public class ReliableResourceCallableTest {
 
     }
 
-    @Test
     /**
-     *
+     * Confirms that when the input is just an end of file, the download status and message
+     * are set to indicate the download is complete.
      */
+    @Test
     public void callDownloadSuccess() throws Exception, IOException
     {
         ReliableResourceStatus returnedStatus = null;
@@ -166,12 +159,12 @@ public class ReliableResourceCallableTest {
 
     }
 
-    @Test
     /**
      * Throw an IOException while reading the input and check that the download status
      * is changed to indicate the product input stream exception by checking the
      * downloadStatus's getDownloadStatus() and toString().
      */
+    @Test
     public void callDownloadIOException() throws Exception, IOException
     {
         ReliableResourceStatus returnedStatus = null;
@@ -188,6 +181,168 @@ public class ReliableResourceCallableTest {
 
     }
 
+    /**
+     * Confirms that, when the cache file passed to the constructor is null, the input is read
+     * the expected number of times, and the bytes streamed to the client
+     * match what is expected.
+     */
+    @Test
+    public void callDownloadWithBytesToReadWhenCacheFileDoesNotExist() throws Exception, IOException
+    {
+
+        chunkSize = 1;
+        int n = 1;
+
+        byte[] expectedTotalBuffer = new byte[2];
+        Arrays.fill(expectedTotalBuffer, (byte) 1);
+
+        byte[] expectedLoopByLoopBuffer = new byte[1];
+        Arrays.fill(expectedLoopByLoopBuffer, (byte) 1);
+
+
+        ReliableResourceStatus returnedStatus = null;
+
+        ReliableResourceCallable testReliableResourceCallable = new ReliableResourceCallable(input, countingFbos,
+               null, chunkSize, lock);
+
+        when(input.read(any(byte[].class))).thenAnswer(new Answer() {
+
+            @Override
+            public Object answer(InvocationOnMock invocationOnMock) throws Throwable {
+                Object[] args = invocationOnMock.getArguments();
+                byte[] buffer = (byte[])(args[0]);
+                Arrays.fill(buffer, (byte) 1);
+                return n;
+            }
+        }).thenAnswer(new Answer() {
+
+        @Override
+        public Object answer(InvocationOnMock invocationOnMock) throws Throwable {
+            Object[] args = invocationOnMock.getArguments();
+            byte[] buffer = (byte[])(args[0]);
+            Arrays.fill(buffer, (byte) 1);
+            return n;
+        }
+    }).thenReturn(END_OF_FILE);
+
+        returnedStatus =  testReliableResourceCallable.call();
+
+        verify(input, times(3)).read(expectedLoopByLoopBuffer);
+
+        assertThat(streamArray.toByteArray(), is(expectedTotalBuffer));
+    }
+
+    /**
+     * Confirms that, when the cache file passed to the constructor is null, the download status
+     * is set to complete when done, and the toString method reflects the number of bytes read.
+     */
+    @Test
+    public void callDownloadWithBytesToReadWhenCacheFileDoesNotExistMessage() throws Exception, IOException
+    {
+
+        chunkSize = 1;
+        int n = 1;
+
+        byte[] expectedTotalBuffer = new byte[2];
+        Arrays.fill(expectedTotalBuffer, (byte) 1);
+
+        byte[] expectedLoopByLoopBuffer = new byte[1];
+        Arrays.fill(expectedLoopByLoopBuffer, (byte) 1);
+
+
+        ReliableResourceStatus returnedStatus = null;
+
+        ReliableResourceCallable testReliableResourceCallable = new ReliableResourceCallable(input, countingFbos,
+                null, chunkSize, lock);
+
+        when(input.read(any(byte[].class))).thenAnswer(new Answer() {
+
+            @Override
+            public Object answer(InvocationOnMock invocationOnMock) throws Throwable {
+                Object[] args = invocationOnMock.getArguments();
+                byte[] buffer = (byte[])(args[0]);
+                Arrays.fill(buffer, (byte) 1);
+                return n;
+            }
+        }).thenAnswer(new Answer() {
+
+            @Override
+            public Object answer(InvocationOnMock invocationOnMock) throws Throwable {
+                Object[] args = invocationOnMock.getArguments();
+                byte[] buffer = (byte[])(args[0]);
+                Arrays.fill(buffer, (byte) 1);
+                return n;
+            }
+        }).thenReturn(END_OF_FILE);
+
+        returnedStatus =  testReliableResourceCallable.call();
+
+        assertThat(returnedStatus.getDownloadStatus(), is(DownloadStatus.RESOURCE_DOWNLOAD_COMPLETE));
+
+        assertThat(returnedStatus.toString(), is ("bytesRead = 2,  downloadStatus = RESOURCE_DOWNLOAD_COMPLETE,  message = Download completed successfully"));
+
+    }
+    /**
+     *Confirms that when the callable's call method is executed and the constructor is given
+     * a cache file, data that is read from the input is also added to the cache file. Also
+     * confirms that the input is read the expected number of times, and that the download status
+     * is set to complete when the download is over.
+     */
+    @Test
+    public void callDownloadWithBytesToReadWhenCacheFileExists() throws Exception, IOException
+    {
+
+        chunkSize = 1;
+        int n = 1;
+
+        byte[] expectedTotalBuffer = new byte[2];
+        Arrays.fill(expectedTotalBuffer, (byte) 2);
+
+        byte[] expectedLoopByLoopBuffer = new byte[1];
+        Arrays.fill(expectedLoopByLoopBuffer, (byte) 2);
+
+        ReliableResourceStatus returnedStatus = null;
+
+        ReliableResourceCallable testReliableResourceCallable = new ReliableResourceCallable(input, countingFbos,
+                testFile, chunkSize, lock);
+
+        when(input.read(any(byte[].class))).thenAnswer(new Answer() {
+
+            @Override
+            public Object answer(InvocationOnMock invocationOnMock) throws Throwable {
+                Object[] args = invocationOnMock.getArguments();
+                byte[] buffer = (byte[])(args[0]);
+                Arrays.fill(buffer, (byte) 2);
+                return n;
+            }
+        }).thenAnswer(new Answer() {
+
+            @Override
+            public Object answer(InvocationOnMock invocationOnMock) throws Throwable {
+                Object[] args = invocationOnMock.getArguments();
+                byte[] buffer = (byte[])(args[0]);
+                Arrays.fill(buffer, (byte) 2);
+                return n;
+            }
+        }).thenReturn(END_OF_FILE);
+
+        returnedStatus =  testReliableResourceCallable.call();
+
+        verify(input, times(3)).read(expectedLoopByLoopBuffer);
+
+        assertThat(returnedStatus.getDownloadStatus(), is(DownloadStatus.RESOURCE_DOWNLOAD_COMPLETE));
+
+        assertThat(cacheFis.read(), is(2));
+        assertThat(cacheFis.read(), is(2));
+        assertThat(cacheFis.read(), is(END_OF_FILE));
+
+    }
+
+    /**
+     * When the cache file passed to the constructor is not null, tests the input is read
+     * the expected number of times and the bytes streamed to the client
+     * match what is expected.
+     */
     @Test
     public void callDownloadWritesToClientOutputStream() throws IOException
     {
@@ -196,7 +351,6 @@ public class ReliableResourceCallableTest {
         byte[] expectedBuffer = new byte[5];
         Arrays.fill(expectedBuffer, (byte) 5);
 
-       // ArgumentCaptor<byte[]> buffer = ArgumentCaptor.forClass(byte[].class);
         when(input.read(any(byte[].class))).thenAnswer(new Answer() {
 
             @Override
@@ -208,20 +362,68 @@ public class ReliableResourceCallableTest {
             }
         }).thenReturn(END_OF_FILE);
 
-        //countingFbos =
+
         ReliableResourceCallable testReliableResourceCallable = new ReliableResourceCallable(input, countingFbos,
                 testFile, chunkSize, lock);
-
-//        verify(countingFbos).write(any(byte[].class),0,n);
-//
-//        if(streamArray.toByteArray().length == 5)
-//        {
-//        }
 
         testReliableResourceCallable.call();
 
         assertThat(streamArray.toByteArray(), is(expectedBuffer));
     }
 
+    /**
+     * Confirms that setting the interrupt download flag to true means that the input is never
+     * read, and the download status and message indicate interruption.
+     */
+    @Test
+    public void interruptStopsRead() throws IOException
+    {
+        chunkSize = 1;
+        int n = 1;
+        byte[] expectedTotalBuffer = new byte[2];
+        Arrays.fill(expectedTotalBuffer, (byte) 2);
+
+        byte[] expectedLoopByLoopBuffer = new byte[1];
+        Arrays.fill(expectedLoopByLoopBuffer, (byte) 2);
+
+        ReliableResourceStatus returnedStatus = null;
+
+
+        ReliableResourceCallable testReliableResourceCallable = new ReliableResourceCallable(input, countingFbos,
+                testFile, chunkSize, lock);
+
+        testReliableResourceCallable.setInterruptDownload(true);
+
+
+        when(input.read(any(byte[].class))).thenAnswer(new Answer() {
+
+            @Override
+            public Object answer(InvocationOnMock invocationOnMock) throws Throwable {
+                Object[] args = invocationOnMock.getArguments();
+                byte[] buffer = (byte[])(args[0]);
+                Arrays.fill(buffer, (byte) 2);
+                return n;
+            }
+        }).thenAnswer(new Answer() {
+
+            @Override
+            public Object answer(InvocationOnMock invocationOnMock) throws Throwable {
+                Object[] args = invocationOnMock.getArguments();
+                byte[] buffer = (byte[])(args[0]);
+                Arrays.fill(buffer, (byte) 2);
+                return n;
+            }
+        }).thenReturn(END_OF_FILE);
+
+        returnedStatus =  testReliableResourceCallable.call();
+
+        verify(input, times(0)).read(expectedLoopByLoopBuffer);
+
+        assertThat(testReliableResourceCallable.getReliableResourceStatus().getDownloadStatus(), is(DownloadStatus.RESOURCE_DOWNLOAD_INTERRUPTED));
+        assertThat(testReliableResourceCallable.getReliableResourceStatus().getBytesRead(), is(0L));
+        assertThat(returnedStatus.toString(), is ("bytesRead = 0,  downloadStatus = RESOURCE_DOWNLOAD_INTERRUPTED,  message = Download interrupted - returning 0 bytes read"));
+
+
+    }
 
 }

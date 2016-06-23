@@ -48,12 +48,12 @@ public class ResourceDownloadCallbackTest
         reliableResourceStatus = mock(ReliableResourceStatus.class);
     }
 
-    @Test
     /**
      * Checks that if the downloader indicates a success and the download was completed,
      * the size of the reliable resource is set and then the reliable resource is given
      * to the resource cache. Finally, the pending cache entry is removed from the resource cache.
      */
+    @Test
     public void onSuccessDownloadComplete() throws Exception
     {
         when(downloader.getDownloadStatus()).thenReturn(DownloadStatus.RESOURCE_DOWNLOAD_COMPLETE);
@@ -72,13 +72,13 @@ public class ResourceDownloadCallbackTest
 
     }
 
-    @Test
     /**
      * Checks that if the downloader indicates a success but the download was not completed
      * it does not add the reliable resource to the resource cache and it
      * enters the if statement that deletes the cache file and then removes the pending cache
      * entry from the resource cache.
      */
+    @Test
     public void onSuccessDownloadNotComplete() throws Exception
     {
         when(downloader.getDownloadStatus()).thenReturn(DownloadStatus.RESOURCE_DOWNLOAD_INTERRUPTED);
@@ -99,10 +99,10 @@ public class ResourceDownloadCallbackTest
         verify(resourceCache, times(1)).removePendingCacheEntry(reliableResource.getKey());
     }
 
-    @Test
     /**
      * Checks that the pending cache entry is removed, even if the downloader indicates a failure.
      */
+    @Test
     public void onFailure() throws Exception
     {
         when(downloader.getReliableResourceStatus()).thenReturn(reliableResourceStatus);
