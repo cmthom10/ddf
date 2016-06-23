@@ -235,6 +235,8 @@ public class ReliableResourceCallable implements Callable<ReliableResourceStatus
                 reliableResourceStatus =
                         new ReliableResourceStatus(DownloadStatus.PRODUCT_INPUT_STREAM_EXCEPTION,
                                 bytesRead.get());
+                reliableResourceStatus.setMessage("IOException during read of product's InputStream");
+
                 closeAndDeleteIfCachingOnly();
                 return reliableResourceStatus;
             }
