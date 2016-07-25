@@ -123,15 +123,9 @@ public class FederatedCswMockServer {
     }
 
     /**
-     * Resets the Restito server by stopping and starting it.
+     * Resets the Restito server.
      */
-    public void reset() {
-        // There is no way in version 0.7 of Restito to clear the calls and reset the
-        // StubServer so we need to stop the current one and create a new instance.
-        // TODO - Replace this code when the new version of Restito is used.
-        stop();
-        start();
-    }
+    public void reset() { cswStubServer.clearCalls(); }
 
     /**
      * Returns StubHttp's whenHttp method with the stub server as the parameter. Use is the same.

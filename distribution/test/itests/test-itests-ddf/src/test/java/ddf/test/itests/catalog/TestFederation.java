@@ -106,6 +106,7 @@ import com.xebialabs.restito.server.secure.SecureStubServer;
 import ddf.catalog.data.Metacard;
 import ddf.catalog.endpoint.CatalogEndpoint;
 import ddf.catalog.endpoint.impl.CatalogEndpointImpl;
+import ddf.common.test.AfterExam;
 import ddf.common.test.BeforeExam;
 import ddf.common.test.cometd.CometDClient;
 import ddf.common.test.cometd.CometDMessageValidator;
@@ -316,8 +317,6 @@ public class TestFederation extends AbstractIntegrationTest {
             resourcesToDelete.clear();
         }
 
-        cswServer.stop();
-
         // @formatter:off
         expect("List of active downloads is empty").within(30, SECONDS)
                 .until(()-> when().get(RESOURCE_DOWNLOAD_ENDPOINT_ROOT.getUrl())
@@ -330,6 +329,14 @@ public class TestFederation extends AbstractIntegrationTest {
 
         if (cometDClient != null) {
             cometDClient.shutdown();
+        }
+    }
+
+    @AfterExam
+    public void afterExam() throws Exception {
+
+        if (cswServer != null) {
+            cswServer.stop();
         }
     }
 
